@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>综合能耗计算平台 - 专业版</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Inter', 'Microsoft YaHei', sans-serif; background-color: #f1f5f9; color: #334155; }
+        .card { background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 1.5rem; overflow: hidden; border: 1px solid #e2e8f0; }
+        .card-header { background-color: #f8fafc; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; }
+        .card-title { font-weight: 800; font-size: 1.25rem; color: #0f172a; display: flex; align-items: center; gap: 0.5rem; }
+        
+        .input-field { width: 100%; padding: 0.4rem 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.875rem; line-height: 1.25rem; transition: all 0.2s; color: #1e293b; }
+        .input-field:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px #bfdbfe; }
+        
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+        .table-header { background-color: #f1f5f9; font-size: 0.9rem; font-weight: 800; color: #475569; border-bottom: 2px solid #e2e8f0; }
+        .table-header th { padding: 0.75rem 0.5rem; }
+
+        .btn-primary { background-color: #2563eb; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; transition: background 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+        .btn-primary:hover { background-color: #1d4ed8; }
+        .btn-secondary { background-color: #fff; color: #475569; border: 1px solid #cbd5e1; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; transition: background 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+        .btn-secondary:hover { background-color: #f1f5f9; }
+        .btn-danger { background-color: #fee2e2; color: #dc2626; padding: 0.4rem 0.8rem; border-radius: 0.5rem; font-weight: 600; transition: background 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+        .btn-danger:hover { background-color: #fecaca; }
+
+        .drag-handle { cursor: grab; color: #94a3b8; touch-action: none; display: flex; align-items: center; justify-content: center; height: 100%; }
+        .drag-handle:active { cursor: grabbing; color: #475569; }
+        .summary-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+        .summary-table th, .summary-table td { border: 1px solid #cbd5e1; padding: 0.75rem; text-align: center; }
+        .summary-table th { background-color: #e2e8f0; font-weight: 800; color: #1e293b; }
+        
+        .btn-add-row { width: 100%; border: 2px dashed #e2e8f0; background-color: #f8fafc; color: #64748b; padding: 0.75rem; border-radius: 0.5rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s; margin-top: 0.5rem; cursor: pointer; }
+        .btn-add-row:hover { border-color: #cbd5e1; background-color: #f1f5f9; color: #475569; }
+
+        .toggle-checkbox:checked { right: 0; border-color: #68D391; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #68D391; }
+        
+        /* Modal Styles */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 50; }
+        .modal-content { background: white; padding: 2rem; border-radius: 0.75rem; width: 90%; max-width: 500px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- 图标组件 ---
+        const IconWrapper = ({ children, size = 20, className = "", ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>{children}</svg>
+        );
+        const Plus = (props) => <IconWrapper {...props}><path d="M5 12h14"/><path d="M12 5v14"/></IconWrapper>;
+        const Trash2 = (props) => <IconWrapper {...props}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></IconWrapper>;
+        const GripVertical = (props) => <IconWrapper {...props}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></IconWrapper>;
+        const Download = (props) => <IconWrapper {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></IconWrapper>;
+        const Zap = (props) => <IconWrapper {...props}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></IconWrapper>;
+        const Calculator = (props) => <IconWrapper {...props}><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></IconWrapper>;
+        const LayoutDashboard = (props) => <IconWrapper {...props}><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></IconWrapper>;
+        const Copy = (props) => <IconWrapper {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></IconWrapper>;
+        const ArrowLeft = (props) => <IconWrapper {...props}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></IconWrapper>;
+        const Save = (props) => <IconWrapper {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></IconWrapper>;
+        const Folder = (props) => <IconWrapper {...props}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></IconWrapper>;
+        const Edit = (props) => <IconWrapper {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></IconWrapper>;
+
+        // --- 基础数据与工具 ---
+        const ENERGY_DATABASE = [
+            { name: '原煤', unit: 't', k: 0.7143, type: 'solid' },
+            { name: '洗精煤', unit: 't', k: 0.9000, type: 'solid' },
+            { name: '洗中煤', unit: 't', k: 0.2857, type: 'solid' },
+            { name: '煤矸石(用作能源)', unit: 't', k: 0.2857, type: 'solid' },
+            { name: '焦炭(干全焦)', unit: 't', k: 0.9714, type: 'solid' },
+            { name: '煤焦油', unit: 't', k: 1.1429, type: 'liquid' },
+            { name: '原油', unit: 't', k: 1.4286, type: 'liquid' },
+            { name: '燃料油', unit: 't', k: 1.4286, type: 'liquid' },
+            { name: '汽油', unit: 't', k: 1.4714, type: 'liquid' },
+            { name: '煤油', unit: 't', k: 1.4714, type: 'liquid' },
+            { name: '柴油', unit: 't', k: 1.4571, type: 'liquid' },
+            { name: '液化天然气', unit: 't', k: 1.7572, type: 'liquid' },
+            { name: '液化石油气', unit: 't', k: 1.7143, type: 'liquid' },
+            { name: '炼厂干气', unit: 't', k: 1.5714, type: 'liquid' },
+            { name: '煤泥', unit: 't', k: 0.3571, type: 'solid' }, 
+            { name: '粗苯', unit: 't', k: 1.4286, type: 'liquid' },
+            { name: '甲醇(用作燃料)', unit: 't', k: 0.6794, type: 'liquid' },
+            { name: '乙醇(用作燃料)', unit: 't', k: 0.9144, type: 'liquid' },
+            { name: '高炉煤气', unit: '10⁴Nm³', k: 1.286, type: 'gas' },
+            { name: '发生炉煤气', unit: '10⁴Nm³', k: 1.786, type: 'gas' },
+            { name: '重油催化裂解煤气', unit: '10⁴Nm³', k: 6.571, type: 'gas' },
+            { name: '重油热裂解煤气', unit: '10⁴Nm³', k: 12.143, type: 'gas' },
+            { name: '焦炭制气', unit: '10⁴Nm³', k: 5.571, type: 'gas' },
+            { name: '压力气化煤气', unit: '10⁴Nm³', k: 5.143, type: 'gas' },
+            { name: '水煤气', unit: '10⁴Nm³', k: 3.571, type: 'gas' },
+            { name: '氢气(用作燃料)', unit: '10⁴Nm³', k: 3.329, type: 'gas' },
+            { name: '沼气', unit: '10⁴Nm³', k: 7.7145, type: 'gas' },
+            { name: '天然气', unit: '10⁴Nm³', k: 12.15, type: 'gas' },
+            { name: '焦炉煤气', unit: '10⁴Nm³', k: 5.9285, type: 'gas' },
+            { name: '新水', unit: '10⁴t', k: 0.2571, type: 'water' },
+            { name: '软化水', unit: 't', k: 0.4857, type: 'water' },
+            { name: '除氧水', unit: 't', k: 0.9714, type: 'water' },
+            { name: '压缩空气', unit: '10⁴Nm³', k: 0.400, type: 'gas' },
+            { name: '氧气', unit: '10⁴Nm³', k: 4.000, type: 'gas' },
+            { name: '氮气(做副产品时)', unit: '10⁴Nm³', k: 4.000, type: 'gas' },
+            { name: '氮气(做主产品时)', unit: '10⁴Nm³', k: 6.714, type: 'gas' },
+            { name: '二氧化碳气', unit: '10⁴Nm³', k: 2.143, type: 'gas' },
+            { name: '乙炔', unit: '10⁴Nm³', k: 83.143, type: 'gas' },
+            { name: '电石', unit: 't', k: 2.0786, type: 'solid' },
+            { name: '电力', unit: '10⁴kW·h', k: 1.229, k_val: 3.015, type: 'electric' },
+            { name: '热力', unit: 'TJ', k: 34.12, k_val: 38.08, type: 'heat' }
+        ];
+
+        const UNIT_OPTIONS = ['t', '10⁴Nm³', '10⁴kW·h', 'TJ', '10⁴t'];
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+        const handleWheel = (e) => e.target.blur();
+
+        // --- 组件: 可拖拽行 ---
+        const DraggableRow = ({ item, index, onUpdate, onDelete, moveRow, isDualRow, isSecondRow, datalistId }) => {
+            const ref = useRef(null);
+            const [isDraggable, setIsDraggable] = useState(false);
+
+            const handleDragStart = (e) => {
+                if (isSecondRow || !isDraggable) { e.preventDefault(); return; }
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', index);
+                ref.current.classList.add('dragging');
+            };
+
+            const handleDragOver = (e) => { if (isSecondRow) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+            const handleDrop = (e) => {
+                if (isSecondRow) return;
+                e.preventDefault();
+                ref.current.classList.remove('dragging');
+                const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                const toIndex = index;
+                if (fromIndex !== toIndex) moveRow(fromIndex, toIndex);
+            };
+            const handleDragEnd = () => { if (ref.current) ref.current.classList.remove('dragging'); };
+
+            const amount = parseFloat(item.amount) || 0;
+            const currentK = isSecondRow ? (item.k_val || item.k) : item.k;
+            const result = item.name === '新水' ? 0 : (amount * parseFloat(currentK||0));
+            const bgClass = 'bg-white'; 
+            const borderClass = isSecondRow ? '' : 'border-b border-gray-100';
+            const isElecOrHeat = item.name === '电力' || item.name === '热力';
+            const remark = isElecOrHeat ? (isSecondRow ? '(等价值)' : '(当量值)') : '';
+
+            return (
+                <tr ref={ref} draggable={isDraggable && !isSecondRow} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd} 
+                    className={`${bgClass} ${borderClass} hover:bg-blue-50 transition-colors`}>
+                    <td className="pl-2 py-3 w-8 text-center">
+                        {!isSecondRow && (
+                            <div className="drag-handle cursor-move p-1 rounded hover:bg-gray-200 inline-block"
+                                onMouseEnter={() => setIsDraggable(true)} onMouseLeave={() => setIsDraggable(false)}>
+                                <GripVertical size={16} />
+                            </div>
+                        )}
+                    </td>
+                    <td className="px-2 py-3 w-[18%]">
+                        {!isSecondRow ? (
+                            <input list={datalistId} className="input-field font-bold text-slate-700 w-full" placeholder="选择或直接输入" value={item.name} onChange={(e) => onUpdate(item.id, 'name', e.target.value)} />
+                        ) : null}
+                    </td>
+                    <td className="px-2 py-3 w-[14%] text-gray-600 text-sm font-semibold">
+                        {!isSecondRow ? (
+                            <select className="input-field bg-gray-50 w-full" value={item.unit} onChange={(e) => onUpdate(item.id, 'unit', e.target.value)}>
+                                {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                        ) : null}
+                    </td>
+                    <td className="px-2 py-3 w-[14%]">
+                        {!isSecondRow ? (
+                            <input type="number" onWheel={handleWheel} className="input-field font-medium w-full" value={item.amount} onChange={(e) => onUpdate(item.id, 'amount', e.target.value)} step="0.01" />
+                        ) : null}
+                    </td>
+                    <td className="px-2 py-3 w-[34%]">
+                        <div className="flex items-center gap-2 w-full">
+                            <input type="number" onWheel={handleWheel} className="input-field w-20 font-mono shrink-0" value={currentK} onChange={(e) => onUpdate(item.id, isSecondRow ? 'k_val' : 'k', e.target.value)} step="0.0001" />
+                            <span className="text-sm text-gray-500 whitespace-nowrap flex items-center">
+                                {item.unit ? `tce/${item.unit}` : ''}
+                                {remark && <span className="text-blue-600 ml-1 font-medium">{remark}</span>}
+                            </span>
+                        </div>
+                    </td>
+                    <td className="px-4 py-3 w-[15%] font-bold text-base text-slate-800 font-mono text-right">
+                        {item.name === '新水' ? <span className="text-amber-500 text-sm">/</span> : result.toFixed(2)}
+                    </td>
+                    <td className="px-2 py-3 w-[5%] text-center">
+                        {!isSecondRow && (
+                            <button onClick={() => onDelete(item.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded hover:bg-red-50">
+                                <Trash2 size={18} />
+                            </button>
+                        )}
+                    </td>
+                </tr>
+            );
+        };
+
+        // --- 核心计算组件 (重构自原 App) ---
+        function CalculationEditor({ projectData, onSave, onBack, projectName }) {
+            const [inputs, setInputs] = useState(projectData?.inputs || [{ id: generateId(), name: '电力', unit: '10⁴kW·h', amount: '', k: 1.229, k_val: 3.015, isCustom: false }]);
+            const [products, setProducts] = useState(projectData?.products || []);
+            const [showRawUsage, setShowRawUsage] = useState(projectData?.showRawUsage || false);
+            const [rawMaterialUsages, setRawMaterialUsages] = useState(projectData?.rawMaterialUsages || []);
+            const [greenPowerRatio, setGreenPowerRatio] = useState(projectData?.greenPowerRatio || '');
+            const tableRef = useRef(null);
+
+            // 监听保存动作 (自动保存或手动触发) - 这里作为方法暴露给 Save 按钮
+            const handleSave = () => {
+                const dataToSave = {
+                    inputs,
+                    products,
+                    showRawUsage,
+                    rawMaterialUsages,
+                    greenPowerRatio
+                };
+                onSave(dataToSave);
+                alert(`项目 "${projectName}" 已保存！`);
+            };
+
+            const addRow = (type) => {
+                const newRow = { id: generateId(), name: '', unit: 't', amount: '', k: '', k_val: '', isCustom: false };
+                type === 'input' ? setInputs([...inputs, newRow]) : setProducts([...products, newRow]);
+            };
+            const deleteRow = (type, id) => {
+                if (type === 'input') {
+                    setInputs(inputs.filter(i => i.id !== id));
+                    setRawMaterialUsages(rawMaterialUsages.filter(u => u.refId !== id));
+                } else if (type === 'product') {
+                    setProducts(products.filter(p => p.id !== id));
+                } else {
+                    setRawMaterialUsages(rawMaterialUsages.filter(u => u.id !== id));
+                }
+            };
+            const updateRow = (type, id, field, value) => {
+                const setList = type === 'input' ? setInputs : setProducts;
+                setList(prev => prev.map(item => {
+                    if (item.id === id) {
+                        const updated = { ...item, [field]: value };
+                        if (field === 'name') {
+                            const match = ENERGY_DATABASE.find(db => db.name === value);
+                            if (match) Object.assign(updated, { unit: match.unit, k: match.k, k_val: match.k_val || '' });
+                        }
+                        return updated;
+                    }
+                    return item;
+                }));
+            };
+            const moveRow = (type, fromIndex, toIndex) => {
+                const list = type === 'input' ? [...inputs] : [...products];
+                const [moved] = list.splice(fromIndex, 1);
+                list.splice(toIndex, 0, moved);
+                (type === 'input' ? setInputs : setProducts)(list);
+            };
+            
+            const addRawUsage = () => setRawMaterialUsages([...rawMaterialUsages, { id: generateId(), refId: '', amount: '' }]);
+            
+            const updateRawUsage = (id, field, value) => {
+                setRawMaterialUsages(prev => prev.map(u => {
+                    if (u.id !== id) return u;
+                    let updated = { ...u, [field]: value };
+                    if (field === 'amount') {
+                        const refInput = inputs.find(i => i.id === updated.refId);
+                        if (refInput) {
+                            const max = parseFloat(refInput.amount) || 0;
+                            const current = parseFloat(value) || 0;
+                            if (current > max) updated.amount = max;
+                        }
+                    }
+                    if (field === 'refId') {
+                        const refInput = inputs.find(i => i.id === value);
+                        if (refInput) {
+                             const max = parseFloat(refInput.amount) || 0;
+                             const current = parseFloat(updated.amount) || 0;
+                             if (current > max) updated.amount = max;
+                        }
+                    }
+                    return updated;
+                }));
+            };
+
+            const calculateItemTce = (item, type = 'eq') => {
+                if (item.name === '新水') return 0;
+                const amount = parseFloat(item.amount) || 0;
+                const k = type === 'val' ? (item.k_val || item.k) : item.k;
+                return amount * (parseFloat(k) || 0);
+            };
+
+            const totalInputEq = inputs.reduce((sum, i) => sum + calculateItemTce(i, 'eq'), 0);
+            const totalInputVal = inputs.reduce((sum, i) => sum + calculateItemTce(i, 'val'), 0);
+            const totalProductEq = products.reduce((sum, i) => sum + calculateItemTce(i, 'eq'), 0);
+            const totalProductVal = products.reduce((sum, i) => sum + calculateItemTce(i, 'val'), 0);
+
+            const rawUsageDedEq = rawMaterialUsages.reduce((sum, u) => {
+                const ref = inputs.find(i => i.id === u.refId);
+                return sum + (ref ? (parseFloat(u.amount)||0) * (parseFloat(ref.k)||0) : 0);
+            }, 0);
+            const rawUsageDedVal = rawMaterialUsages.reduce((sum, u) => {
+                const ref = inputs.find(i => i.id === u.refId);
+                return sum + (ref ? (parseFloat(u.amount)||0) * (parseFloat(ref.k_val || ref.k)||0) : 0);
+            }, 0);
+
+            const elecItems = inputs.filter(i => i.name === '电力');
+            const ratio = parseFloat(greenPowerRatio) || 0;
+            const greenDedEq = elecItems.reduce((sum, item) => sum + (parseFloat(item.amount)||0) * (ratio / 100) * parseFloat(item.k || 0), 0);
+            const greenDedVal = elecItems.reduce((sum, item) => sum + (parseFloat(item.amount)||0) * (ratio / 100) * parseFloat(item.k_val || item.k || 0), 0);
+
+            const netEq = totalInputEq - totalProductEq;
+            const netVal = totalInputVal - totalProductVal;
+            const finalEq = netEq - rawUsageDedEq - greenDedEq;
+            const finalVal = netVal - rawUsageDedVal - greenDedVal;
+            const dedRawEq = netEq - rawUsageDedEq;
+            const dedRawVal = netVal - rawUsageDedVal;
+            const hasRawUsageData = rawMaterialUsages.length > 0;
+
+            const generateSummaryData = () => {
+                const rows = [];
+                // Input
+                inputs.forEach(item => {
+                    const rawUse = rawMaterialUsages.find(u => u.refId === item.id);
+                    const rawAmount = rawUse ? parseFloat(rawUse.amount) : 0;
+                    const totalAmount = parseFloat(item.amount) || 0;
+                    const isElec = item.name === '电力';
+                    
+                    if (isElec) {
+                        const r = parseFloat(greenPowerRatio) || 0;
+                        const fireAmount = totalAmount * (1 - r/100);
+                        const greenAmount = totalAmount * (r/100);
+                        rows.push({ type: 'input', name: '总电力', unit: item.unit, amount: totalAmount, k: item.k, k_val: item.k_val, isElecHeader: true, isDual: true });
+                        if (r < 100) rows.push({ type: 'input', name: `火电 (${(100-r)}%)`, unit: item.unit, amount: fireAmount, k: item.k, k_val: item.k_val, isSubElec: true, isDual: true });
+                        if (r > 0) rows.push({ type: 'input', name: `绿电 (${r}%)`, unit: item.unit, amount: greenAmount, k: item.k, k_val: item.k_val, isSubElec: true, isDual: true });
+                    } else if (rawAmount > 0) {
+                        const fuelAmount = totalAmount - rawAmount;
+                        if (fuelAmount < 0.0001) {
+                             rows.push({ type: 'input', name: `${item.name} (原料)`, unit: item.unit, amount: rawAmount, k: item.k, k_val: item.k, isDual: item.name === '热力' });
+                        } else {
+                            rows.push({ type: 'input', name: `${item.name} (扣除原料后)`, unit: item.unit, amount: fuelAmount, k: item.k, k_val: item.k, isDual: item.name === '热力' });
+                            rows.push({ type: 'input', name: `${item.name} (原料)`, unit: item.unit, amount: rawAmount, k: item.k, k_val: item.k, isDual: item.name === '热力' });
+                        }
+                    } else {
+                        const isDual = item.name === '热力';
+                        rows.push({ type: 'input', name: item.name, unit: item.unit, amount: totalAmount, k: item.k, k_val: item.k_val || item.k, isDual: isDual });
+                    }
+                });
+                // Output
+                products.forEach(item => {
+                    const isDual = item.name === '电力' || item.name === '热力';
+                    rows.push({ type: 'output', name: item.name, unit: item.unit, amount: parseFloat(item.amount)||0, k: item.k, k_val: item.k_val || item.k, isDual: isDual });
+                });
+                return rows;
+            };
+
+            const summaryRows = generateSummaryData();
+
+            const copyTable = () => {
+                if (!tableRef.current) return;
+                const range = document.createRange();
+                range.selectNode(tableRef.current);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                try { document.execCommand('copy'); alert('表格已复制到剪贴板！'); } catch (err) { alert('复制失败'); }
+                window.getSelection().removeAllRanges();
+            };
+
+            const exportExcel = () => {
+                const wb = XLSX.utils.book_new();
+                const ws_data = [];
+                ws_data.push(['类别', '主要能源种类', '单位', '年实物量', '折标系数', '折标煤量 (tce)']);
+                let currentRow = 1;
+                const merges = [];
+
+                const inputRows = summaryRows.filter(r => r.type === 'input');
+                let inputStartRow = currentRow;
+                inputRows.forEach(r => {
+                    if (r.isDual) {
+                         ws_data.push([(currentRow === inputStartRow ? '输入' : null), r.name + (r.note ? ` ${r.note}` : ''), r.unit, r.amount, `${r.k_val || r.k} tce/${r.unit} (等价值)`, (r.amount * (r.k_val || r.k))]);
+                         ws_data.push([null, null, null, null, `${r.k} tce/${r.unit} (当量值)`, (r.amount * r.k)]);
+                         merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow + 1, c: 1 } });
+                         merges.push({ s: { r: currentRow, c: 2 }, e: { r: currentRow + 1, c: 2 } });
+                         merges.push({ s: { r: currentRow, c: 3 }, e: { r: currentRow + 1, c: 3 } });
+                         currentRow += 2;
+                    } else {
+                         ws_data.push([(currentRow === inputStartRow ? '输入' : null), r.name + (r.note ? ` ${r.note}` : ''), r.unit, r.amount, `${r.k} tce/${r.unit}`, (r.amount * r.k)]);
+                         currentRow += 1;
+                    }
+                });
+                if (currentRow > inputStartRow) merges.push({ s: { r: inputStartRow, c: 0 }, e: { r: currentRow - 1, c: 0 } });
+
+                const outputRows = summaryRows.filter(r => r.type === 'output');
+                let outputStartRow = currentRow;
+                outputRows.forEach(r => {
+                    if (r.isDual) {
+                         ws_data.push([(currentRow === outputStartRow ? '输出' : null), r.name, r.unit, r.amount, `${r.k_val || r.k} tce/${r.unit} (等价值)`, (r.amount * (r.k_val || r.k))]);
+                         ws_data.push([null, null, null, null, `${r.k} tce/${r.unit} (当量值)`, (r.amount * r.k)]);
+                         merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow + 1, c: 1 } });
+                         merges.push({ s: { r: currentRow, c: 2 }, e: { r: currentRow + 1, c: 2 } });
+                         merges.push({ s: { r: currentRow, c: 3 }, e: { r: currentRow + 1, c: 3 } });
+                         currentRow += 2;
+                    } else {
+                         ws_data.push([(currentRow === outputStartRow ? '输出' : null), r.name, r.unit, r.amount, `${r.k} tce/${r.unit}`, (r.amount * r.k)]);
+                         currentRow += 1;
+                    }
+                });
+                if (currentRow > outputStartRow) merges.push({ s: { r: outputStartRow, c: 0 }, e: { r: currentRow - 1, c: 0 } });
+
+                let blockStart = currentRow;
+                ws_data.push(['项目综合能源消费量 (tce)\n' + (hasRawUsageData ? '不扣原料与绿电' : '不扣绿电'), null, null, null, '当量值', netEq]);
+                ws_data.push([null, null, null, null, '等价值', netVal]);
+                merges.push({ s: { r: blockStart, c: 0 }, e: { r: blockStart + 1, c: 3 } });
+                currentRow += 2;
+
+                if (hasRawUsageData) {
+                    blockStart = currentRow;
+                    ws_data.push(['项目综合能源消费量 (tce)\n扣除原料用能', null, null, null, '当量值', dedRawEq]);
+                    ws_data.push([null, null, null, null, '等价值', dedRawVal]);
+                    merges.push({ s: { r: blockStart, c: 0 }, e: { r: blockStart + 1, c: 3 } });
+                    currentRow += 2;
+                }
+
+                blockStart = currentRow;
+                ws_data.push(['项目综合能源消费量 (tce)\n' + (hasRawUsageData ? '扣除原料与绿电' : '扣除绿电'), null, null, null, '当量值', finalEq]);
+                ws_data.push([null, null, null, null, '等价值', finalVal]);
+                merges.push({ s: { r: blockStart, c: 0 }, e: { r: blockStart + 1, c: 3 } });
+
+                const ws = XLSX.utils.aoa_to_sheet(ws_data);
+                ws['!merges'] = merges;
+                ws['!cols'] = [{wch: 10}, {wch: 25}, {wch: 10}, {wch: 15}, {wch: 30}, {wch: 15}];
+                XLSX.utils.book_append_sheet(wb, ws, "能耗汇总表");
+                XLSX.writeFile(wb, `${projectName}_能耗计算.xlsx`);
+            };
+
+            return (
+                <div className="max-w-7xl mx-auto p-4 md:p-8 animate-in fade-in zoom-in duration-300">
+                    <header className="mb-6 flex justify-between items-center">
+                        <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-700 transition font-bold">
+                            <ArrowLeft size={20} /> 返回项目列表
+                        </button>
+                        <div className="flex gap-4">
+                            <h1 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
+                                <Zap className="text-blue-600 fill-blue-600" />
+                                {projectName}
+                            </h1>
+                        </div>
+                        <button onClick={handleSave} className="btn-primary bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200">
+                            <Save size={18} /> 保存计算
+                        </button>
+                    </header>
+
+                    {/* 1. 输入 */}
+                    <div className="card">
+                         <div className="card-header">
+                            <h2 className="card-title text-blue-700">
+                                <span className="bg-blue-100 text-blue-700 py-1 px-2.5 rounded text-sm mr-2">1</span>
+                                原料输入 (Inputs)
+                            </h2>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="table-header">
+                                    <tr>
+                                        <th className="pl-2 w-8"></th>
+                                        <th className="px-2 w-[18%]">主要能源种类</th>
+                                        <th className="px-2 w-[14%]">计量单位</th>
+                                        <th className="px-2 w-[14%]">年需要实物量</th>
+                                        <th className="px-2 w-[34%]">折标系数</th>
+                                        <th className="px-4 text-right w-[15%]">折标煤量 (tce)</th>
+                                        <th className="px-2 w-[5%] text-center"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {inputs.map((row, index) => {
+                                        const isDual = row.name === '电力' || row.name === '热力';
+                                        return (
+                                            <React.Fragment key={row.id}>
+                                                <DraggableRow item={row} index={index} onUpdate={(id, f, v) => updateRow('input', id, f, v)} onDelete={(id) => deleteRow('input', id)} moveRow={(f, t) => moveRow('input', f, t)} isDualRow={isDual} isSecondRow={false} datalistId="energy-options" />
+                                                {isDual && <DraggableRow item={row} index={index} onUpdate={(id, f, v) => updateRow('input', id, f, v)} isDualRow={true} isSecondRow={true} datalistId="energy-options" />}
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="p-4 pt-0">
+                            <button onClick={() => addRow('input')} className="btn-add-row text-blue-500 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200">
+                                <Plus size={20} /> 添加原料
+                            </button>
+                        </div>
+                        <div className="bg-slate-50 p-4 border-t border-slate-200 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
+                            <div className="flex items-center gap-3 bg-white px-3 py-2 rounded border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-2 text-green-700 font-bold text-sm">
+                                    <Zap size={18} />
+                                    <span>绿电比例:</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <input type="number" onWheel={handleWheel} className="w-20 text-right border-b-2 border-slate-300 focus:border-green-500 focus:outline-none px-1 py-0.5 font-bold text-green-700" placeholder="0" value={greenPowerRatio} onChange={e => setGreenPowerRatio(e.target.value)} min="0" max="100" />
+                                    <span className="text-slate-500 font-bold">%</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="text-sm font-bold text-slate-700">有无原料用能</span>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" className="sr-only toggle-checkbox" checked={showRawUsage} onChange={() => setShowRawUsage(!showRawUsage)} />
+                                    <div className="w-11 h-6 bg-gray-200 rounded-full toggle-label transition-colors duration-200 ease-in-out"></div>
+                                    <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out ${showRawUsage ? 'translate-x-5' : ''}`}></div>
+                                </label>
+                            </div>
+                        </div>
+                        {showRawUsage && (
+                            <div className="border-t border-indigo-100 bg-indigo-50/50 p-4 animate-in fade-in slide-in-from-top-1">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h3 className="text-sm font-bold text-indigo-800 flex items-center gap-2">
+                                        <span className="w-1.5 h-4 bg-indigo-500 rounded-full"></span> 原料用能
+                                    </h3>
+                                </div>
+                                <div className="bg-white rounded border border-indigo-100 overflow-hidden">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="table-header">
+                                            <tr>
+                                                <th className="pl-4 w-[25%]">选择对应原料</th>
+                                                <th className="px-4 w-[14%]">计量单位</th>
+                                                <th className="px-4 w-[14%]">原料用能量</th>
+                                                <th className="px-4 w-[27%]">折标系数</th>
+                                                <th className="px-4 text-right w-[15%]">折标煤量 (tce)</th>
+                                                <th className="px-4 w-[5%] text-center"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-indigo-50">
+                                            {rawMaterialUsages.map(u => {
+                                                const ref = inputs.find(i => i.id === u.refId);
+                                                return (
+                                                    <tr key={u.id} className="bg-white hover:bg-indigo-50 transition-colors">
+                                                        <td className="pl-4 py-3">
+                                                            <select className="input-field font-bold text-slate-700 w-full" value={u.refId} onChange={e => updateRawUsage(u.id, 'refId', e.target.value)}>
+                                                                <option value="">请选择...</option>
+                                                                {inputs.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                                            </select>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-gray-600 text-sm font-semibold">{ref ? ref.unit : '-'}</td>
+                                                        <td className="px-4 py-3">
+                                                            <input type="number" onWheel={handleWheel} className="input-field font-medium w-full" value={u.amount} onChange={e => updateRawUsage(u.id, 'amount', e.target.value)} placeholder="0" step="0.01" />
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 font-mono">
+                                                            {ref ? `${ref.k} tce/${ref.unit}` : '-'}
+                                                        </td>
+                                                        <td className="px-4 py-3 font-mono font-bold text-indigo-700 text-right">
+                                                            {ref ? (parseFloat(u.amount||0) * ref.k).toFixed(2) : '0.00'}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <button onClick={() => deleteRow('rawUsage', u.id)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50">
+                                                                <Trash2 size={20} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <button onClick={addRawUsage} className="btn-add-row text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200">
+                                    <Plus size={20} /> 添加原料用能
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 2. 产品 */}
+                    <div className="card">
+                        <div className="card-header">
+                            <h2 className="card-title text-emerald-700">
+                                <span className="bg-emerald-100 text-emerald-700 py-1 px-2.5 rounded text-sm mr-2">2</span>
+                                产品输出 (Outputs)
+                            </h2>
+                        </div>
+                         <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="table-header">
+                                    <tr>
+                                        <th className="pl-2 w-8"></th>
+                                        <th className="px-2 w-[18%]">主要能源种类</th>
+                                        <th className="px-2 w-[14%]">计量单位</th>
+                                        <th className="px-2 w-[14%]">年产出实物量</th>
+                                        <th className="px-2 w-[34%]">折标系数</th>
+                                        <th className="px-4 text-right w-[15%]">折标煤量 (tce)</th>
+                                        <th className="px-2 w-[5%] text-center"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {products.map((row, index) => {
+                                        const isDual = row.name === '电力' || row.name === '热力';
+                                        return (
+                                            <React.Fragment key={row.id}>
+                                                <DraggableRow item={row} index={index} onUpdate={(id, f, v) => updateRow('product', id, f, v)} onDelete={(id) => deleteRow('product', id)} moveRow={(f, t) => moveRow('product', f, t)} isDualRow={isDual} isSecondRow={false} datalistId="energy-options" />
+                                                {isDual && <DraggableRow item={row} index={index} onUpdate={(id, f, v) => updateRow('product', id, f, v)} isDualRow={true} isSecondRow={true} datalistId="energy-options" />}
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="p-4 pt-0">
+                            <button onClick={() => addRow('product')} className="btn-add-row text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200">
+                                <Plus size={20} /> 添加产品
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* 3. 结果 */}
+                    <div className="card border-t-4 border-blue-500">
+                        <div className="card-header bg-white">
+                            <h2 className="card-title text-slate-800">
+                                <Calculator size={24} className="text-blue-600" />
+                                3. 计算结果 (Calculation Results)
+                            </h2>
+                        </div>
+                        <div className={`p-6 grid grid-cols-1 ${hasRawUsageData ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6`}>
+                            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                                <div className="text-slate-500 text-sm font-bold mb-2">
+                                    {hasRawUsageData ? '不扣原料与绿电' : '不扣绿电'}
+                                </div>
+                                <div className="flex justify-between items-end mb-1">
+                                    <span className="text-slate-600 text-sm font-semibold">当量值</span>
+                                    <span className="text-2xl font-bold text-slate-800">{netEq.toFixed(2)} <span className="text-sm font-medium text-slate-500">tce</span></span>
+                                </div>
+                                <div className="flex justify-between items-end">
+                                    <span className="text-slate-600 text-sm font-semibold">等价值</span>
+                                    <span className="text-xl font-bold text-slate-600">{netVal.toFixed(2)} <span className="text-sm font-medium text-slate-400">tce</span></span>
+                                </div>
+                            </div>
+
+                            {hasRawUsageData && (
+                                <div className="bg-indigo-50 p-5 rounded-xl border border-indigo-200">
+                                    <div className="text-indigo-600 text-sm font-bold mb-2">扣除原料用能</div>
+                                    <div className="flex justify-between items-end mb-1">
+                                        <span className="text-indigo-700 text-sm font-semibold">当量值</span>
+                                        <span className="text-2xl font-bold text-indigo-900">{dedRawEq.toFixed(2)} <span className="text-sm font-medium text-indigo-400">tce</span></span>
+                                    </div>
+                                    <div className="flex justify-between items-end">
+                                        <span className="text-indigo-700 text-sm font-semibold">等价值</span>
+                                        <span className="text-xl font-bold text-indigo-800">{dedRawVal.toFixed(2)} <span className="text-sm font-medium text-indigo-400">tce</span></span>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="bg-green-50 p-5 rounded-xl border border-green-200">
+                                <div className="text-green-600 text-sm font-bold mb-2">
+                                    {hasRawUsageData ? '扣除原料与绿电' : '扣除绿电'}
+                                </div>
+                                <div className="flex justify-between items-end mb-1">
+                                    <span className="text-green-700 text-sm font-semibold">当量值</span>
+                                    <span className="text-3xl font-extrabold text-green-700">{finalEq.toFixed(2)} <span className="text-lg font-bold text-green-500">tce</span></span>
+                                </div>
+                                <div className="flex justify-between items-end">
+                                    <span className="text-green-700 text-sm font-semibold">等价值</span>
+                                    <span className="text-2xl font-bold text-green-600">{finalVal.toFixed(2)} <span className="text-base font-bold text-green-400">tce</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 4. 导出 */}
+                    <div className="card border-t-4 border-slate-800">
+                        <div className="card-header bg-slate-800 text-white">
+                            <h2 className="card-title text-white">
+                                <LayoutDashboard size={24} />
+                                4. 整理与导出 (Organize & Export)
+                            </h2>
+                            <div className="flex gap-2">
+                                <button onClick={copyTable} className="btn-secondary text-sm px-3 py-1.5 border-none bg-slate-700 text-white hover:bg-slate-600">
+                                    <Copy size={16} /> 复制表格
+                                </button>
+                                <button onClick={exportExcel} className="btn-primary bg-white text-slate-900 hover:bg-slate-100 border-none text-sm px-4 py-2">
+                                    <Download size={18} /> 导出 Excel
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="p-6 overflow-x-auto">
+                            <table className="summary-table" ref={tableRef}>
+                                <thead>
+                                    <tr>
+                                        <th width="10%">类别</th>
+                                        <th width="20%">主要能源种类</th>
+                                        <th width="10%">单位</th>
+                                        <th width="15%">年实物量</th>
+                                        <th width="25%">折标系数</th>
+                                        <th width="20%">折标煤量 (tce)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td rowSpan={summaryRows.filter(r=>r.type==='input').reduce((acc, r) => acc + (r.isDual ? 2 : 1), 0) + 1} className="font-bold bg-slate-50">输入</td></tr>
+                                    {summaryRows.filter(r=>r.type==='input').map((row, idx) => {
+                                        const baseRowClass = row.isSubElec ? "bg-slate-50" : "";
+                                        if (row.isDual) {
+                                            return (
+                                                <React.Fragment key={`sum-in-${idx}`}>
+                                                    <tr className={baseRowClass}>
+                                                        <td rowSpan={2} className="font-bold text-left pl-4">{row.name}{row.note && <span className="block text-xs font-normal text-gray-500">{row.note}</span>}</td>
+                                                        <td rowSpan={2}>{row.unit}</td>
+                                                        <td rowSpan={2} className="font-mono">{row.amount.toFixed(2)}</td>
+                                                        <td className="text-left pl-4"><span className="font-mono font-bold">{row.k_val || row.k}</span> <span className="text-xs text-gray-500 ml-1">tce/{row.unit} (等价值)</span></td>
+                                                        <td className="font-mono font-bold text-right pr-4">{row.name.includes('新水') ? '/' : (row.amount * (row.k_val || row.k)).toFixed(2)}</td>
+                                                    </tr>
+                                                    <tr className={baseRowClass}>
+                                                        <td className="text-left pl-4 border-t-0"><span className="font-mono font-bold">{row.k}</span> <span className="text-xs text-gray-500 ml-1">tce/{row.unit} (当量值)</span></td>
+                                                        <td className="font-mono font-bold text-right pr-4 border-t-0">{row.name.includes('新水') ? '/' : (row.amount * row.k).toFixed(2)}</td>
+                                                    </tr>
+                                                </React.Fragment>
+                                            );
+                                        } else {
+                                            return (
+                                                <tr key={`sum-in-${idx}`} className={baseRowClass}>
+                                                    <td className="font-bold text-left pl-4">{row.name}{row.note && <span className="block text-xs font-normal text-gray-500">{row.note}</span>}</td>
+                                                    <td>{row.unit}</td>
+                                                    <td className="font-mono">{row.amount.toFixed(2)}</td>
+                                                    <td className="text-left pl-4"><span className="font-mono font-bold">{row.k}</span> <span className="text-xs text-gray-500 ml-1">tce/{row.unit}</span></td>
+                                                    <td className="font-mono font-bold text-right pr-4">{row.name.includes('新水') ? '/' : (row.amount * row.k).toFixed(2)}</td>
+                                                </tr>
+                                            );
+                                        }
+                                    })}
+
+                                    <tr><td rowSpan={summaryRows.filter(r=>r.type==='output').reduce((acc, r) => acc + (r.isDual ? 2 : 1), 0) + 1} className="font-bold bg-slate-50">输出</td></tr>
+                                    {summaryRows.filter(r=>r.type==='output').map((row, idx) => {
+                                         if (row.isDual) {
+                                            return (
+                                                <React.Fragment key={`sum-out-${idx}`}>
+                                                    <tr>
+                                                        <td rowSpan={2} className="text-left pl-4">{row.name}</td>
+                                                        <td rowSpan={2}>{row.unit}</td>
+                                                        <td rowSpan={2} className="font-mono">{row.amount.toFixed(2)}</td>
+                                                        <td className="text-left pl-4"><span className="font-mono font-bold">{row.k_val || row.k}</span><span className="text-xs text-gray-500 ml-1">tce/{row.unit} (等价值)</span></td>
+                                                        <td className="font-mono font-bold text-right pr-4">{(row.amount * (row.k_val || row.k)).toFixed(2)}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="text-left pl-4 border-t-0"><span className="font-mono font-bold">{row.k}</span><span className="text-xs text-gray-500 ml-1">tce/{row.unit} (当量值)</span></td>
+                                                        <td className="font-mono font-bold text-right pr-4 border-t-0">{(row.amount * row.k).toFixed(2)}</td>
+                                                    </tr>
+                                                </React.Fragment>
+                                            )
+                                        } else {
+                                            return (
+                                                <tr key={`sum-out-${idx}`}>
+                                                    <td className="text-left pl-4">{row.name}</td>
+                                                    <td>{row.unit}</td>
+                                                    <td className="font-mono">{row.amount.toFixed(2)}</td>
+                                                    <td className="text-left pl-4"><span className="font-mono font-bold">{row.k}</span><span className="text-xs text-gray-500 ml-1">tce/{row.unit}</span></td>
+                                                    <td className="font-mono font-bold text-right pr-4">{(row.amount * row.k).toFixed(2)}</td>
+                                                </tr>
+                                            )
+                                        }
+                                    })}
+
+                                    <tr className="bg-slate-100 border-t-4 border-slate-300">
+                                        <td colSpan="4" rowSpan={2} className="text-left font-bold pl-4 align-top pt-4">项目综合能源消费量 (tce)<br/><span className="text-sm font-normal text-gray-500">{hasRawUsageData ? '不扣原料与绿电' : '不扣绿电'}</span></td>
+                                        <td className="font-bold text-left pl-4">当量值</td>
+                                        <td className="font-mono font-bold text-right pr-4 text-lg">{netEq.toFixed(2)}</td>
+                                    </tr>
+                                    <tr className="bg-slate-100">
+                                        <td className="font-bold text-left pl-4">等价值</td>
+                                        <td className="font-mono font-bold text-right pr-4 text-lg">{netVal.toFixed(2)}</td>
+                                    </tr>
+
+                                    {hasRawUsageData && (
+                                        <React.Fragment>
+                                            <tr className="bg-indigo-50">
+                                                <td colSpan="4" rowSpan={2} className="text-left font-bold pl-4 align-top pt-4 text-indigo-900">项目综合能源消费量 (tce)<br/><span className="text-sm font-normal text-indigo-600">扣除原料用能</span></td>
+                                                <td className="font-bold text-left pl-4 text-indigo-900">当量值</td>
+                                                <td className="font-mono font-bold text-right pr-4 text-lg text-indigo-700">{dedRawEq.toFixed(2)}</td>
+                                            </tr>
+                                            <tr className="bg-indigo-50">
+                                                <td className="font-bold text-left pl-4 text-indigo-900">等价值</td>
+                                                <td className="font-mono font-bold text-right pr-4 text-lg text-indigo-700">{dedRawVal.toFixed(2)}</td>
+                                            </tr>
+                                        </React.Fragment>
+                                    )}
+
+                                    <tr className="bg-green-50">
+                                        <td colSpan="4" rowSpan={2} className="text-left font-bold pl-4 align-top pt-4 text-green-900">项目综合能源消费量 (tce)<br/><span className="text-sm font-normal text-green-600">{hasRawUsageData ? '扣除原料与绿电' : '扣除绿电'}</span></td>
+                                        <td className="font-bold text-left pl-4 text-green-900">当量值</td>
+                                        <td className="font-mono font-bold text-right pr-4 text-lg text-green-700">{finalEq.toFixed(2)}</td>
+                                    </tr>
+                                    <tr className="bg-green-50">
+                                        <td className="font-bold text-left pl-4 text-green-900">等价值</td>
+                                        <td className="font-mono font-bold text-right pr-4 text-lg text-green-700">{finalVal.toFixed(2)}</td>
+                                    </tr>
+
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <datalist id="energy-options">{ENERGY_DATABASE.map(item => <option key={item.name} value={item.name} />)}</datalist>
+                </div>
+            );
+        }
+
+        // --- 项目管理列表组件 ---
+        function ProjectList({ projects, onCreate, onSelect, onDelete }) {
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [newProjectName, setNewProjectName] = useState('');
+
+            const handleCreate = () => {
+                if (!newProjectName.trim()) return;
+                onCreate(newProjectName);
+                setNewProjectName('');
+                setIsModalOpen(false);
+            };
+
+            return (
+                <div className="max-w-6xl mx-auto p-4 md:p-12 animate-in fade-in slide-in-from-bottom-4">
+                    <header className="mb-12 text-center">
+                        <div className="flex justify-center mb-4">
+                            <div className="bg-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-200">
+                                <Zap className="text-white" size={48} />
+                            </div>
+                        </div>
+                        <h1 className="text-4xl font-extrabold text-slate-800 tracking-tight mb-3">综合能耗计算平台</h1>
+                        <p className="text-slate-500 font-medium max-w-2xl mx-auto">请选择一个现有项目进行编辑，或新建一个项目开始计算。数据将自动保存在您的浏览器中。</p>
+                    </header>
+
+                    <div className="card border-0 shadow-xl">
+                        <div className="p-6 bg-white flex justify-between items-center border-b border-gray-100">
+                            <h2 className="text-xl font-bold text-slate-700 flex items-center gap-2">
+                                <Folder className="text-blue-500" />
+                                项目列表
+                            </h2>
+                            <button onClick={() => setIsModalOpen(true)} className="btn-primary shadow-md shadow-blue-100">
+                                <Plus size={18} /> 新建项目
+                            </button>
+                        </div>
+                        
+                        {projects.length === 0 ? (
+                            <div className="p-12 text-center text-slate-400 bg-slate-50">
+                                <div className="mb-4 flex justify-center"><LayoutDashboard size={48} className="opacity-20" /></div>
+                                <p className="mb-4">暂无项目，请点击上方按钮新建</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-slate-50 text-slate-500 font-bold text-sm uppercase">
+                                        <tr>
+                                            <th className="px-6 py-4">项目名称</th>
+                                            <th className="px-6 py-4">更新时间</th>
+                                            <th className="px-6 py-4 text-right">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {projects.map(p => (
+                                            <tr key={p.id} className="hover:bg-blue-50/50 transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <div className="font-bold text-slate-800 text-lg">{p.name}</div>
+                                                    <div className="text-xs text-slate-400 font-mono mt-1">{p.id}</div>
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-500 text-sm">
+                                                    {new Date(p.updatedAt).toLocaleString()}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex justify-end gap-3">
+                                                        <button onClick={() => onSelect(p.id)} className="btn-secondary text-sm px-3 py-1.5 hover:text-blue-600 hover:border-blue-200">
+                                                            <Edit size={16} /> 编辑/查看
+                                                        </button>
+                                                        <button onClick={() => { if(confirm('确认删除该项目吗？')) onDelete(p.id); }} className="btn-danger text-sm px-3 py-1.5 bg-white border border-red-100 hover:bg-red-50">
+                                                            <Trash2 size={16} /> 删除
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Modal */}
+                    {isModalOpen && (
+                        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+                            <div className="modal-content" onClick={e => e.stopPropagation()}>
+                                <h3 className="text-xl font-bold mb-4 text-slate-800">新建项目</h3>
+                                <div className="mb-6">
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">项目名称</label>
+                                    <input autoFocus type="text" className="input-field p-3 text-lg" placeholder="例如：2025年某化工厂能耗核算" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreate()} />
+                                </div>
+                                <div className="flex justify-end gap-3">
+                                    <button onClick={() => setIsModalOpen(false)} className="btn-secondary">取消</button>
+                                    <button onClick={handleCreate} className="btn-primary">创建并开始</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // --- 主程序入口 ---
+        function MainApp() {
+            // view: 'list' | 'editor'
+            const [view, setView] = useState('list');
+            const [projects, setProjects] = useState([]);
+            const [currentProjectId, setCurrentProjectId] = useState(null);
+
+            // Load from LocalStorage on mount
+            useEffect(() => {
+                const saved = localStorage.getItem('energy_projects');
+                if (saved) {
+                    try {
+                        setProjects(JSON.parse(saved));
+                    } catch (e) {
+                        console.error("Failed to load projects", e);
+                    }
+                }
+            }, []);
+
+            // Save to LocalStorage whenever projects change
+            useEffect(() => {
+                localStorage.setItem('energy_projects', JSON.stringify(projects));
+            }, [projects]);
+
+            const handleCreateProject = (name) => {
+                const newProject = {
+                    id: generateId(),
+                    name: name,
+                    updatedAt: new Date().toISOString(),
+                    data: null // Initial empty data, editor handles defaults
+                };
+                setProjects([newProject, ...projects]);
+                setCurrentProjectId(newProject.id);
+                setView('editor');
+            };
+
+            const handleDeleteProject = (id) => {
+                setProjects(projects.filter(p => p.id !== id));
+            };
+
+            const handleSelectProject = (id) => {
+                setCurrentProjectId(id);
+                setView('editor');
+            };
+
+            const handleSaveProjectData = (data) => {
+                setProjects(prev => prev.map(p => {
+                    if (p.id === currentProjectId) {
+                        return { ...p, data: data, updatedAt: new Date().toISOString() };
+                    }
+                    return p;
+                }));
+            };
+
+            const activeProject = projects.find(p => p.id === currentProjectId);
+
+            return (
+                <div>
+                    {view === 'list' && (
+                        <ProjectList 
+                            projects={projects} 
+                            onCreate={handleCreateProject} 
+                            onSelect={handleSelectProject} 
+                            onDelete={handleDeleteProject}
+                        />
+                    )}
+                    {view === 'editor' && activeProject && (
+                        <CalculationEditor 
+                            key={activeProject.id} // Important: force re-render when switching projects
+                            projectName={activeProject.name}
+                            projectData={activeProject.data}
+                            onSave={handleSaveProjectData}
+                            onBack={() => setView('list')}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<MainApp />);
+    </script>
+</body>
+</html>
